@@ -65,7 +65,7 @@ def create_tree_cast(dico):
     console.print("")
     tree = Tree("Casting", guide_style="bold bright_black")
     for m, cast in dico.items():
-        casting_tree = tree.add(f'[green]{m}', guide_style="bright_black")
+        casting_tree = tree.add(f'[green]{[mov["title"] for mov in m]}', guide_style="bright_black")
         for i in cast:
             casting_tree.add( f"[yellow]{i['name']} [green]({i.currentRole})[/] - [bold link={create_link_person(i.personID)}][blue]Movie Link[/]")  
 
@@ -113,9 +113,13 @@ def search_actors(name: Annotated[list[str], typer.Argument(..., help="Enter per
 
 @app.command()
 def keys():
-    key = keyboard.record()
-    keyboard.add_hotkey('space', keys)
-    print('test')
+    key = keyboard.record(until='enter')
+    keyboard.play(key, speed_factor=3)
+
+    
+
+def test(keys):
+    print(keys)
 
 @run_in_thread
 def search_person(pers):    
@@ -192,8 +196,7 @@ def get_filmo(person):
 def filmo(nom: str = typer.Option(..., prompt="Enter actor's names ")):
     """Retourne la filmographie d'une personne"""
     lst_persons.append(nom)
-    search_lst_ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPM344vWxySMbenGth6PMqMU/fAafTIKKJyP72R6794P alex@kali
-persons()
+    search_lst_persons()
     dico[lst_persons[0]] = get_filmo(lst_persons[0])
     create_tree_persons(dico)
 
@@ -205,10 +208,11 @@ def casting(title: str = typer.Option(..., prompt="Enter movie's names ")):
     create_tree_cast(dico)
 
 @app.command()
-def compare_casts(movies: Annotated[list[str], typer.Argument(..., help="Enter movie's names ")]):
+def compare_casts(movies: Annotated[list[str], typer.Option(..., '-m')]):
     """Compare le cast de plusieurs films"""
     global lst_movies
     lst_movies = movies
+    print(movies)
     search_lst_movies()
     resultats = {}
 
