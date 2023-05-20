@@ -192,7 +192,8 @@ def get_filmo(person):
 def filmo(nom: str = typer.Option(..., prompt="Enter actor's names ")):
     """Retourne la filmographie d'une personne"""
     lst_persons.append(nom)
-    search_lst_persons()
+    search_lst_ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPM344vWxySMbenGth6PMqMU/fAafTIKKJyP72R6794P alex@kali
+persons()
     dico[lst_persons[0]] = get_filmo(lst_persons[0])
     create_tree_persons(dico)
 
@@ -233,4 +234,3 @@ if __name__ == '__main__':
     #search_actors(['peter', 'stormare', 'keanu', 'reeves', 'lance', 'reddick', 'carrie', 'fisher', 'lance', 'reddick', 'common'])
     #filmo('keanu reeves')
     #compare_casts(['matrix', 'matrix-revolutions'])
-    #test
