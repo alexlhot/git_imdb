@@ -1,12 +1,12 @@
 import threading
 import time
+import sys
 from itertools import zip_longest
 import itertools
 from rich.progress import track
 import typer
 from typing import List, Optional
 from typing_extensions import Annotated
-from typing import Tuple
 from rich import *
 from rich.console import Console
 from rich.tree import Tree
@@ -91,6 +91,8 @@ ia = Cinemagoer()
 dico = Demo()
 lst_persons = []
 lst_movies = []
+set_movies = set()
+titre = ''
 
 def start():    
     # on récupère les objets Person
@@ -111,15 +113,45 @@ def search_actors(name: Annotated[list[str], typer.Argument(..., help="Enter per
     search_lst_persons()
     find_shared_movies()
 
+def get_title_from_keys():
+    global titre
+    set_movies.add(titre)
+    # remonte le curseur, au début de la ligne
+    sys.stdout.write('\033[1A\033[1G')
+    sys.stdout.write(titre)
+    # le redescend pour conntinuer l'ajout 
+    sys.stdout.write('\033[1B')
+    # reset le titre
+    titre = ''
+
+def on_keypress(event):
+    global titre
+    key = event.name
+    
+    if key == 'space':
+        titre += ' '
+        print(' ', end='')
+    elif key == 'backspace':
+        if len(titre) > 0:
+            sys.stdout.write('\033[2K\033[1G')# erase line and go to beginning of line
+            titre = titre[:-1]
+            print(titre, end='')
+    elif key == 'enter':
+        set_movies.add(titre)
+        print('\n', set_movies)
+        exit()
+    else:
+        print(key, end='')
+        titre += key
+
 @app.command()
 def keys():
-    key = keyboard.record(until='enter')
-    keyboard.play(key, speed_factor=3)
-
-    
-
-def test(keys):
-    print(keys)
+    """Recherche des films"""
+    print('Entrer titres films, séparés par "," ; Enter pour confirmer :')
+    print('')    
+    keyboard.on_press(on_keypress)
+    keyboard.add_hotkey(',', get_title_from_keys)
+    keyboard.wait()
 
 @run_in_thread
 def search_person(pers):    
