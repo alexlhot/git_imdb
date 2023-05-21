@@ -171,24 +171,22 @@ def create_link_movie(id):
 def create_link_person(id):
     return f'http://www.imdb.com/name/nm{id}'
 
-@app.command()
+#@app.command()
 def get_notes_real(nom):
-    notes, position = [], []
-    pos = 1
-    person = search_person(nom)
-    for film in person['director']:
-        try:
-            get_movie_by_id(film.movieID)
-            notes.append(float(movie['rating']))
-            filmo.append(movie['title'])
-            position.append(pos)
-            pos += 1
-        except:
-            continue
-    # on met l'ordre des films du premier au dernier
-    notes.reverse()
-    filmo.reverse()
-    diagramme = list(zip(position, notes))
+    lst_persons.append(nom)
+    search_lst_persons()
+    
+    for person in lst_persons:
+        for film in person['director']:
+            film = ia.update(film, 'vote details')
+            try:
+                lst_movies.append([film['title'], float(film['notes'])])
+            except:
+                print(film)
+                continue
+        for i in lst_movies:
+            for j, k in i:
+                print(j, k)
 
 def find_shared_movies():  
     resultats = {}
@@ -268,7 +266,8 @@ def demographics(nom: str = typer.Option(..., prompt="Enter movie's name ")):
 
 
 if __name__ == '__main__':
-    app()
+    #app()
     #search_actors(['peter', 'stormare', 'keanu', 'reeves', 'lance', 'reddick', 'carrie', 'fisher', 'lance', 'reddick', 'common'])
     #filmo('keanu reeves')
     #compare_casts(['matrix', 'matrix-revolutions'])
+    get_notes_real('shyamalan')
