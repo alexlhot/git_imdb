@@ -1,15 +1,16 @@
 import threading
+import queue
 import time
 import sys
 from itertools import zip_longest
 import itertools
-from rich.progress import track
 import typer
-from typing import List, Optional
 from typing_extensions import Annotated
 from rich import *
 from rich.console import Console
 from rich.tree import Tree
+from rich.live import Live
+from rich.table import Table
 from prodict import Prodict
 from imdb import Cinemagoer
 import keyboard
@@ -45,7 +46,7 @@ def create_tree_persons(dico):
     console.print("")
     tree = Tree("Collaborations", guide_style="bold bright_black")
     for p, movies in dico.items():   
-        movies_tree = tree.add(f'[green]{[p]}', guide_style="bright_black")
+        movies_tree = tree.add(f'[green]{p}', guide_style="bright_black")
         if movies:                 
             for movie in movies:
                 movies_tree.add( f"[yellow]{movie['title']} - [bold link={create_link_movie(movie.movieID)}][blue]Movie Link[/]")
@@ -74,7 +75,7 @@ def create_tree_cast(dico):
 
 def run_in_thread(f):
     def run(*args, **kwargs):
-        thread = threading.Thread(target=f, args=args, kwargs=kwargs)
+        thread = threading.Thread(target=f, args=args, kwargs=kwargs)     
         thread.start()
         print(thread, 'start')
         return thread
@@ -110,7 +111,7 @@ def search_actors(name: Annotated[list[str], typer.Argument(..., help="Enter per
     zip_noms = zip_longest(*noms, fillvalue='')
     [set_noms.add(f'{i[0]} {i[1]}') for i in zip_noms]
     lst_persons = list(set_noms)
-    search_lst_persons()
+    test_search_lst_persons()
     find_shared_movies()
 
 def get_title_from_keys():
@@ -160,10 +161,28 @@ def search_person(pers):
     lst_persons.remove(pers) 
     lst_persons.insert(0, person)
     
+def generate_table(liste) -> Table:
+    table = Table()
+    table.add_column('Person')
+    table.add_column('Status')
+    for p in liste:
+        table.add_row(f"{p}",  "[red]En cours" if threading.active_count() > 1 else "[green]Terminé")
+    return table
+
 def search_lst_persons():
-    for p in lst_persons:           
+    for p in lst_persons:   
         search_person(p)
-    while_threads()       
+    while_threads()
+
+
+def test_search_lst_persons():
+    with Live(generate_table(lst_persons), refresh_per_second=1) as live:        
+        for p in lst_persons:
+            search_person(p)                   
+            time.sleep(0.4)
+            live.update(generate_table(lst_persons))
+            if threading.active_count() > 1:
+                continue
     
 def create_link_movie(id):
     return f'http://www.imdb.com/title/tt{id}'
@@ -173,20 +192,19 @@ def create_link_person(id):
 
 #@app.command()
 def get_notes_real(nom):
-    lst_persons.append(nom)
-    search_lst_persons()
-    
-    for person in lst_persons:
-        for film in person['director']:
-            film = ia.update(film, 'vote details')
-            try:
-                lst_movies.append([film['title'], float(film['notes'])])
-            except:
-                print(film)
-                continue
-        for i in lst_movies:
-            for j, k in i:
-                print(j, k)
+    liste = []
+    pers = ia.search_person(nom)
+    p = pers[0]
+    ia.update(p, 'filmography')
+    for film in p['director']:
+        ia.update(film, 'vote details')  
+        try:
+            liste.append([film['title'], float(film['rating'])])
+        except:
+            print('test')
+    for i in liste:
+        for j, k in i:
+            print(j, k)
 
 def find_shared_movies():  
     resultats = {}
@@ -205,6 +223,14 @@ def search_movie(name):
     lst_movies.remove(name) 
     lst_movies.insert(0, movie)
 
+def test_search_lst_movies():
+    with Live(generate_table(lst_persons), refresh_per_second=4) as live:
+        for m in lst_movies:
+            search_movie(m)
+            time.sleep(0.4)
+            live.update(generate_table(lst_persons))
+       
+   
 def search_lst_movies():
     for m in lst_movies:
         search_movie(m)
@@ -225,7 +251,7 @@ def get_filmo(person):
         return []
  
 @app.command()
-def filmo(nom: str = typer.Option(..., prompt="Enter actor's names ")):
+def filmo(nom: str = typer.Option(..., prompt="Enter actor's name ")):
     """Retourne la filmographie d'une personne"""
     lst_persons.append(nom)
     search_lst_persons()
@@ -267,7 +293,7 @@ def demographics(nom: str = typer.Option(..., prompt="Enter movie's name ")):
 
 if __name__ == '__main__':
     #app()
-    #search_actors(['peter', 'stormare', 'keanu', 'reeves', 'lance', 'reddick', 'carrie', 'fisher', 'lance', 'reddick', 'common'])
+    search_actors(['peter', 'stormare', 'keanu', 'reeves', 'lance', 'reddick', 'carrie', 'fisher', 'lance', 'reddick', 'common'])
     #filmo('keanu reeves')
     #compare_casts(['matrix', 'matrix-revolutions'])
-    get_notes_real('shyamalan')
+    #get_notes_real('kubrick')
