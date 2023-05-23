@@ -1,5 +1,5 @@
 import threading
-import queue
+from rich.markdown import Markdown
 import time
 import sys
 from itertools import zip_longest
@@ -45,19 +45,19 @@ def create_tree_persons(dico):
     console.print("")
     console.print("")
     tree = Tree("Collaborations", guide_style="bold bright_black")
-    for p, movies in dico.items():   
-        movies_tree = tree.add(f'[green]{p}', guide_style="bright_black")
+    for p, movies in dico.items():        
+        movies_tree = tree.add(f'[green]{[pers["name"] for pers in p]}', guide_style="bright_black")
         if movies:                 
             for movie in movies:
                 movies_tree.add( f"[yellow]{movie['title']} - [bold link={create_link_movie(movie.movieID)}][blue]Movie Link[/]")
-        else:
-            movies_tree.add(f"[red]No movies shared.")
+        """ else:
+            movies_tree.add(f"[red]No movies shared.")"""
     persons_tree = tree.add('[white]Liste des acteurs')
     for p in lst_persons:
         persons_tree.add(f"[yellow]{p['name']}[/] - [bold link={create_link_person(p.personID)}][blue]Person Link[/]")
 
     console.print(tree)
-    console.print("")   
+    console.print("")
 
 def create_tree_cast(dico):
     console = Console(record=True, width=100)
@@ -66,40 +66,47 @@ def create_tree_cast(dico):
     console.print("")
     tree = Tree("Casting", guide_style="bold bright_black")
     for m, cast in dico.items():
-        casting_tree = tree.add(f'[green]{[mov["title"] for mov in m]}', guide_style="bright_black")
+        casting_tree = tree.add(f'[green]{[movie["title"] for movie in m]}', guide_style="bright_black")
         for i in cast:
-            casting_tree.add( f"[yellow]{i['name']} [green]({i.currentRole})[/] - [bold link={create_link_person(i.personID)}][blue]Movie Link[/]")  
+            casting_tree.add( f"[green]{i['name']} [green]({i.currentRole})[/] - [bold link={create_link_person(i.personID)}][blue]Movie Link[/]")  
 
     console.print(tree)
     console.print("")  
+
+def generate_table() -> Table:
+    table = Table()
+    table.add_column('Personne')
+    table.add_column('Recherche')
+
+    for th, p in dico_th.items():
+        table.add_row(p, "[red]En cours" if th.is_alive() else "[green]Terminée")
+    return table
+
+def live_table():
+    with Live(generate_table()) as live:
+        for _ in range(1000):
+            live.update(generate_table())
+            time.sleep(0.5)
+            if threading.active_count() == 2:
+                live.update(generate_table())
+                time.sleep(0.5)
+                break
 
 def run_in_thread(f):
     def run(*args, **kwargs):
         thread = threading.Thread(target=f, args=args, kwargs=kwargs)     
         thread.start()
-        print(thread, 'start')
+        dico_th[thread] = args[0]
         return thread
     return run
-
-def while_threads():
-    i = 0
-    while threading.active_count() > 1:
-        time.sleep(0.5)
-        i += 0.5
-        print(f'{i} secondes', end='\r')
 
 ia = Cinemagoer()
 dico = Demo()
 lst_persons = []
 lst_movies = []
 set_movies = set()
+dico_th = {}
 titre = ''
-
-def start():    
-    # on récupère les objets Person
-    search_lst_persons()
-    while_threads()    
-    find_shared_movies()
 
 @app.command()
 def search_actors(name: Annotated[list[str], typer.Argument(..., help="Enter persons' name ")]):
@@ -111,7 +118,7 @@ def search_actors(name: Annotated[list[str], typer.Argument(..., help="Enter per
     zip_noms = zip_longest(*noms, fillvalue='')
     [set_noms.add(f'{i[0]} {i[1]}') for i in zip_noms]
     lst_persons = list(set_noms)
-    test_search_lst_persons()
+    search_lst_persons()
     find_shared_movies()
 
 def get_title_from_keys():
@@ -155,57 +162,37 @@ def keys():
     keyboard.wait()
 
 @run_in_thread
-def search_person(pers):    
+def search_person(pers):
     persons = ia.search_person(pers)
     person = ia.get_person(persons[0].personID)
     lst_persons.remove(pers) 
     lst_persons.insert(0, person)
-    
-def generate_table(liste) -> Table:
-    table = Table()
-    table.add_column('Person')
-    table.add_column('Status')
-    for p in liste:
-        table.add_row(f"{p}",  "[red]En cours" if threading.active_count() > 1 else "[green]Terminé")
-    return table
 
 def search_lst_persons():
-    for p in lst_persons:   
-        search_person(p)
-    while_threads()
+    for p in lst_persons:
+        search_person(p)        
+    live_table()
 
-
-def test_search_lst_persons():
-    with Live(generate_table(lst_persons), refresh_per_second=1) as live:        
-        for p in lst_persons:
-            search_person(p)                   
-            time.sleep(0.4)
-            live.update(generate_table(lst_persons))
-            if threading.active_count() > 1:
-                continue
-    
 def create_link_movie(id):
     return f'http://www.imdb.com/title/tt{id}'
 
 def create_link_person(id):
     return f'http://www.imdb.com/name/nm{id}'
 
-#@app.command()
+@app.command()
 def get_notes_real(nom):
-    liste = []
-    pers = ia.search_person(nom)
-    p = pers[0]
-    ia.update(p, 'filmography')
-    for film in p['director']:
-        ia.update(film, 'vote details')  
+   lst_persons.append(nom)
+   search_lst_persons()
+   p = lst_persons[0]
+   for i in p['director']:
+       lst_movies.append(i['title'])
+   search_lst_movies()
+   for film in lst_movies:        
         try:
-            liste.append([film['title'], float(film['rating'])])
+           print(film['title'], film['year'], film['rating'])
         except:
-            print('test')
-    for i in liste:
-        for j, k in i:
-            print(j, k)
-
+            continue
+   
 def find_shared_movies():  
     resultats = {}
     for x in range(2, len(lst_persons)+1):
@@ -217,24 +204,16 @@ def find_shared_movies():
     
     create_tree_persons(resultats)
 
-@run_in_thread    
+@run_in_thread
 def search_movie(name):
     movie = ia.get_movie(ia.search_movie(name)[0].movieID)    
     lst_movies.remove(name) 
     lst_movies.insert(0, movie)
 
-def test_search_lst_movies():
-    with Live(generate_table(lst_persons), refresh_per_second=4) as live:
-        for m in lst_movies:
-            search_movie(m)
-            time.sleep(0.4)
-            live.update(generate_table(lst_persons))
-       
-   
 def search_lst_movies():
     for m in lst_movies:
-        search_movie(m)
-    while_threads()
+        search_movie(m)            
+    live_table()
 
 def get_genre_person(person):
     # cherche si c'est un acteur et détermine le genre
@@ -255,18 +234,20 @@ def filmo(nom: str = typer.Option(..., prompt="Enter actor's name ")):
     """Retourne la filmographie d'une personne"""
     lst_persons.append(nom)
     search_lst_persons()
-    dico[lst_persons[0]] = get_filmo(lst_persons[0])
+    dico[(lst_persons[0])] = get_filmo(lst_persons[0])
     create_tree_persons(dico)
 
 @app.command()
-def casting(title: str = typer.Option(..., prompt="Enter movie's names ")):
-    """Retourne le cast d'un film"""
-    movie = search_movie(title)
-    dico[movie] = movie['cast']
+def cast(title: str = typer.Option(..., '-t', prompt="Enter movie's name ")):
+    """Retourne le casting d'un film"""
+    lst_movies.append(title)
+    search_lst_movies()
+    movie = lst_movies
+    dico[movie] = movie['cast'] # movie ne fonctionne pas en étant une liste
     create_tree_cast(dico)
 
 @app.command()
-def compare_casts(movies: Annotated[list[str], typer.Option(..., '-m')]):
+def compare_cast(movies: Annotated[list[str], typer.Option(..., '-m')]):
     """Compare le cast de plusieurs films"""
     global lst_movies
     lst_movies = movies
@@ -286,14 +267,16 @@ def compare_casts(movies: Annotated[list[str], typer.Option(..., '-m')]):
 @app.command()
 def demographics(nom: str = typer.Option(..., prompt="Enter movie's name ")):
     """Get the démographics of a movie"""
-    movie = search_movie(nom)
-    ia.update(movie, 'vote details')
-    print(movie['demographics'][dico.all])
+    lst_movies.append(nom)
+    search_lst_movies()
+    for movie in lst_movies:
+        ia.update(movie, 'vote details')
+        print(movie['demographics'][dico.all])
 
 
 if __name__ == '__main__':
-    #app()
-    search_actors(['peter', 'stormare', 'keanu', 'reeves', 'lance', 'reddick', 'carrie', 'fisher', 'lance', 'reddick', 'common'])
+    app()
+    #search_actors(['peter', 'stormare', 'chloe', 'moretz', 'lance', 'reddick', 'nicolas', 'cage', 'lance', 'reddick', 'common'])
     #filmo('keanu reeves')
     #compare_casts(['matrix', 'matrix-revolutions'])
     #get_notes_real('kubrick')
