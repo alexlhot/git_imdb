@@ -63,14 +63,14 @@ def create_tree_persons(dico):
     console.print(tree)
     console.print("")
 
-def create_tree_cast(dico):
+def create_tree_cast(dico, func):
     console = Console(record=True, width=100)
 
     console.print("")
     console.print("")
     tree = Tree("Casting", guide_style="bold bright_black")
     for m, cast in dico.items():
-        casting_tree = tree.add(f'[green]{[movie["title"] for movie in m]}', guide_style="bright_black")
+        casting_tree = tree.add(f'[green]{func(m)}', guide_style="bright_black")
         for i in cast:
             casting_tree.add( f"[green]{i['name']} [green]({i.currentRole})[/] - [bold link={create_link_person(i.personID)}][blue]Movie Link[/]")  
 
@@ -215,15 +215,17 @@ def search_person(pers):
         lst_persons.remove(pers) 
         lst_persons.insert(0, person)
     except:
-        print(f'{pers} not found.')
+        print(f'search_person, {pers} not found.')
 
 def search_lst_persons():
     liste_tests = lst_persons
+    print(liste_tests, lst_persons)
     for p in lst_persons:
         search_person(p)        
     live_table()
+    print(liste_tests, lst_persons)#"""a voir !"""
     if liste_tests == lst_persons:
-        print(f'{lst_persons} not found.')
+        print(f'lst_persons not found.')
         sys.exit()
 
 def create_link_movie(id):
@@ -271,9 +273,9 @@ def find_shared_movies():
     create_tree_persons(resultats)
 
 @run_in_thread
-def search_movie(name):
-    movie = ia.get_movie(ia.search_movie(name)[0].movieID)
-    lst_movies.remove(name)
+def search_movie(film):
+    movie = ia.get_movie(ia.search_movie(film)[0].movieID)
+    lst_movies.remove(film)
     lst_movies.insert(0, movie)
 
 def search_lst_movies():
@@ -316,19 +318,18 @@ def filmo(nom: str = typer.Option(..., prompt="Enter actor's name ")):
 
 @app.command()
 def cast(title: str = typer.Option(..., '-t', prompt="Enter movie's name ")):
-    """Retourne le casting d'un film"""
+    """Retourne le casting d'un seul film"""
     lst_movies.append(title)
     search_lst_movies()
-    movie = lst_movies
-    dico[movie] = movie['cast'] # movie ne fonctionne pas en étant une liste
-    create_tree_cast(dico)
+    movie = lst_movies[0]
+    dico[movie] = movie['cast']
+    create_tree_cast(dico, lambda m: m)
 
 @app.command()
 def compare_cast(movies: Annotated[list[str], typer.Option(..., '-m')]):
     """Compare le cast de plusieurs films"""
-    global lst_movies
-    lst_movies = movies
-    print(movies)
+    #global lst_movies
+    [lst_movies.append(m) for m in movies]
     search_lst_movies()
     resultats = {}
 
@@ -339,7 +340,7 @@ def compare_cast(movies: Annotated[list[str], typer.Option(..., '-m')]):
                 liste &= set(mov['cast'])
             resultats[m] = liste
 
-    create_tree_cast(resultats)
+    create_tree_cast(resultats, (lambda m: m['title'] for m in resultats.values()))
 
 @app.command()
 def demographics(nom: str = typer.Option(..., prompt="Enter movie's name ")):
@@ -351,11 +352,11 @@ def demographics(nom: str = typer.Option(..., prompt="Enter movie's name ")):
         print(movie['demographics'][dico.all])
 
 if __name__ == '__main__':
-    app()
+    #app()
     #search_actors(['peter', 'stormare', 'chloe', 'moretz', 'lance', 'reddick', 'nicolas', 'cage', 'lance', 'reddick', 'common'])
     #filmo('keanu reeves common')
-    #compare_casts(['matrix', 'matrix-revolutions'])
+    compare_cast(['goodfellas', 'brazil'])
     #get_notes_real('Chad Stahelski')
-    
+    #cast('avatar')
     #lst_persons.append('chloe moretz')
     #test_search_lst_persons()
