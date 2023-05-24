@@ -1,5 +1,4 @@
 import threading
-from rich.markdown import Markdown
 import time
 import sys
 from itertools import zip_longest
@@ -13,7 +12,10 @@ from rich.live import Live
 from rich.table import Table
 from prodict import Prodict
 from imdb import Cinemagoer
+from imdb import Movie
 import keyboard
+import plotext as plt
+
 
 app = typer.Typer(name='IMDB', add_completion=False, help='Recherche IMDB')
 
@@ -45,8 +47,8 @@ def create_tree_persons(dico):
     console.print("")
     console.print("")
     tree = Tree("Collaborations", guide_style="bold bright_black")
-    for p, movies in dico.items():        
-        movies_tree = tree.add(f'[green]{[pers["name"] for pers in p]}', guide_style="bright_black")
+    for p, movies in dico.items():
+        movies_tree = tree.add(f'[green]{p}', guide_style="bright_black")
         if movies:                 
             for movie in movies:
                 movies_tree.add( f"[yellow]{movie['title']} - [bold link={create_link_movie(movie.movieID)}][blue]Movie Link[/]")
@@ -79,7 +81,27 @@ def generate_table() -> Table:
     table.add_column('Recherche')
 
     for th, p in dico_th.items():
-        table.add_row(p, "[red]En cours" if th.is_alive() else "[green]Terminée")
+        nom = p
+        if not isinstance(nom, str):
+            nom = p['title']
+        table.add_row(nom, "[red]En cours" if th.is_alive() else "[green]Terminée")
+    return table
+
+def test_generate_table() -> Table:
+    table = Table()
+    table.add_column('Personne')
+    table.add_column('Recherche')
+
+    for th, p in dico_th.items():
+        nom = p
+        if not isinstance(nom, str):
+            nom = p['name']
+        table.add_row(nom, "[red]En cours" if th.is_alive() else "[green]Terminée")
+        for _ in table.rows:
+            if not th.is_alive():
+                table.rows.clear()
+           
+ 
     return table
 
 def live_table():
@@ -153,13 +175,35 @@ def on_keypress(event):
         titre += key
 
 @app.command()
-def keys():
+def keys():    
     """Recherche des films"""
     print('Entrer titres films, séparés par "," ; Enter pour confirmer :')
     print('')    
     keyboard.on_press(on_keypress)
     keyboard.add_hotkey(',', get_title_from_keys)
     keyboard.wait()
+
+liste = []
+liste2 = []
+lock = threading.Lock()
+def test_search_person(id):
+    liste2.append(ia.get_person(id))
+def test(person):
+    [liste.append(p) for p in ia.search_person(person)]
+
+def test_search_lst_persons():
+    for p in lst_persons:
+        th = threading.Thread(target=test, args=(p,))
+        dico_th[th] = p
+        th.start()
+    time.sleep(3)
+    for p in liste:
+        th = threading.Thread(target=test_search_person, args=(p.personID,))
+        th.start()
+        dico_th[th] = p
+    live_table()
+
+    print(liste2)
 
 @run_in_thread
 def search_person(pers):
@@ -181,19 +225,33 @@ def create_link_person(id):
 
 @app.command()
 def get_notes_real(nom):
+   year, rating, titles = [2017, 2019, 2022, 2025, 2026], [2.8, 7, 5.2, 1, 9.4], ['Us', 'Get Out', 'Nope']
+   
    lst_persons.append(nom)
    search_lst_persons()
    p = lst_persons[0]
-   for i in p['director']:
-       lst_movies.append(i['title'])
-   search_lst_movies()
-   for film in lst_movies:        
+   [lst_movies.append(i) for i in p['director']]
+   search_lst_movies_by_id()
+   #[lst_movies.append(i['title']) for i in p['director']]
+   #search_lst_movies()
+   year, rating, titles = [], [], []
+   for film in lst_movies:
         try:
-           print(film['title'], film['year'], film['rating'])
-        except:
-            continue
+            if film['year'] and film['rating']:
+                year.append(film['year'])
+                rating.append(film['rating'])
+                titles.append(film['title'])
+        except Exception as e:
+            print(e)
+   test_plot(year, rating, p['name'])
    
-def find_shared_movies():  
+def test_plot(ratings, year, name):
+    plt.scatter(ratings, year)
+    print(plt.doc.scatter())
+    plt.title(f'Ratings of {name}')
+    plt.show()
+
+def find_shared_movies():
     resultats = {}
     for x in range(2, len(lst_persons)+1):
         for p in itertools.combinations(lst_persons, x):
@@ -206,13 +264,24 @@ def find_shared_movies():
 
 @run_in_thread
 def search_movie(name):
-    movie = ia.get_movie(ia.search_movie(name)[0].movieID)    
-    lst_movies.remove(name) 
+    movie = ia.get_movie(ia.search_movie(name)[0].movieID)
+    lst_movies.remove(name)
     lst_movies.insert(0, movie)
 
 def search_lst_movies():
     for m in lst_movies:
-        search_movie(m)            
+        search_movie(m)  
+    live_table()
+
+@run_in_thread
+def search_movie_by_id(film):
+    movie = ia.get_movie(film.movieID)
+    lst_movies.remove(film)
+    lst_movies.insert(0, movie)
+
+def search_lst_movies_by_id():
+    for m in lst_movies:
+        search_movie_by_id(m)         
     live_table()
 
 def get_genre_person(person):
@@ -273,10 +342,12 @@ def demographics(nom: str = typer.Option(..., prompt="Enter movie's name ")):
         ia.update(movie, 'vote details')
         print(movie['demographics'][dico.all])
 
-
 if __name__ == '__main__':
     app()
     #search_actors(['peter', 'stormare', 'chloe', 'moretz', 'lance', 'reddick', 'nicolas', 'cage', 'lance', 'reddick', 'common'])
     #filmo('keanu reeves')
     #compare_casts(['matrix', 'matrix-revolutions'])
-    #get_notes_real('kubrick')
+    #get_notes_real('Chad Stahelski')
+    
+    #lst_persons.append('chloe moretz')
+    #test_search_lst_persons()
