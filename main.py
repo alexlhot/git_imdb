@@ -41,15 +41,17 @@ class Demo(Prodict):
     non_us = 'ttrt fltr non us users'
 
 
-def create_tree_persons(dico):
+def create_tree_persons(dico): 
     console = Console(record=True, width=100)
+    print(dico.values())
 
     console.print("")
     console.print("")
     tree = Tree("Collaborations", guide_style="bold bright_black")
+    
     for p, movies in dico.items():
         movies_tree = tree.add(f'[green]{p}', guide_style="bright_black")
-        if movies:                 
+        if movies:
             for movie in movies:
                 movies_tree.add( f"[yellow]{movie['title']} - [bold link={create_link_movie(movie.movieID)}][blue]Movie Link[/]")
         """ else:
@@ -123,7 +125,7 @@ def run_in_thread(f):
     return run
 
 ia = Cinemagoer()
-dico = Demo()
+dico = {}
 lst_persons = []
 lst_movies = []
 set_movies = set()
@@ -207,15 +209,22 @@ def test_search_lst_persons():
 
 @run_in_thread
 def search_person(pers):
-    persons = ia.search_person(pers)
-    person = ia.get_person(persons[0].personID)
-    lst_persons.remove(pers) 
-    lst_persons.insert(0, person)
+    try:
+        persons = ia.search_person(pers)
+        person = ia.get_person(persons[0].personID)
+        lst_persons.remove(pers) 
+        lst_persons.insert(0, person)
+    except:
+        print(f'{pers} not found.')
 
 def search_lst_persons():
+    liste_tests = lst_persons
     for p in lst_persons:
         search_person(p)        
     live_table()
+    if liste_tests == lst_persons:
+        print(f'{lst_persons} not found.')
+        sys.exit()
 
 def create_link_movie(id):
     return f'http://www.imdb.com/title/tt{id}'
@@ -223,7 +232,6 @@ def create_link_movie(id):
 def create_link_person(id):
     return f'http://www.imdb.com/name/nm{id}'
 
-@app.command()
 def get_notes_real(nom):
    year, rating, titles = [2017, 2019, 2022, 2025, 2026], [2.8, 7, 5.2, 1, 9.4], ['Us', 'Get Out', 'Nope']
    
@@ -296,14 +304,14 @@ def get_filmo(person):
         genre = get_genre_person(person)
         return  person[genre]
     except:
-        return []
+        return None
  
 @app.command()
 def filmo(nom: str = typer.Option(..., prompt="Enter actor's name ")):
     """Retourne la filmographie d'une personne"""
     lst_persons.append(nom)
     search_lst_persons()
-    dico[(lst_persons[0])] = get_filmo(lst_persons[0])
+    dico[lst_persons[0]] = get_filmo(lst_persons[0])
     create_tree_persons(dico)
 
 @app.command()
@@ -345,7 +353,7 @@ def demographics(nom: str = typer.Option(..., prompt="Enter movie's name ")):
 if __name__ == '__main__':
     app()
     #search_actors(['peter', 'stormare', 'chloe', 'moretz', 'lance', 'reddick', 'nicolas', 'cage', 'lance', 'reddick', 'common'])
-    #filmo('keanu reeves')
+    #filmo('keanu reeves common')
     #compare_casts(['matrix', 'matrix-revolutions'])
     #get_notes_real('Chad Stahelski')
     
