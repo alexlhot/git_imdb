@@ -183,7 +183,7 @@ def get_filmo(person):
         genre = get_genre_person(person)
         return  person[genre]
     except:
-        return None # a modifier
+        return []
  
 @imdb.command()
 def filmo(name: str = typer.Option(..., prompt="Acteur ", help="Un seul acteur à entrer")):
