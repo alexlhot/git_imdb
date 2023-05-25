@@ -225,5 +225,4 @@ def compare_casts(movies: Annotated[list[str], typer.Option(..., '-m', help="Un 
 
 if __name__ == '__main__':
     # appel de l'app avec typer
-    #imdb()
-    search_actors(['dicaprio', 'robert', 'de', 'niro', 'keanu', 'reeves', 'common'])
+    imdb()
