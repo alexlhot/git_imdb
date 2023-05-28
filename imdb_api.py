@@ -11,6 +11,9 @@ from rich.tree import Tree
 from rich.live import Live
 from rich.table import Table
 from imdb import Cinemagoer
+import matplotlib.pyplot as plt
+import json
+from tinydb import TinyDB, Query
 
 # création appli avec typer
 imdb = typer.Typer(name='IMDB', add_completion=False, help='Recherche IMDB')
@@ -157,10 +160,12 @@ def find_shared_movies():
     
     create_tree_persons(resultats)
 
-@run_in_thread
+#@run_in_thread
 def search_movie(film):
     # fonction de recherche pour chaque film
-    movie = ia.get_movie(ia.search_movie(film)[0].movieID)
+    if isinstance(film, str): # vérifie si str ou obj Movie
+        movie = ia.search_movie(film)[0]
+    movie = ia.get_movie(film.movieID)
     lst_movies.remove(film)
     lst_movies.insert(0, movie)
 
@@ -171,7 +176,7 @@ def search_lst_movies():
     live_table()
 
 def get_genre_person(person):
-    # cherche si c'est un acteur et détermine le genre
+    # cherche si c'est un acteur et détermine le genre   
     if 'actor' in person['filmography']:
         return 'actor'
     elif 'actress' in person['filmography']:
@@ -180,6 +185,11 @@ def get_genre_person(person):
 def get_filmo(person):
     # renvoie la filmo grâce au genre : actor/actress
     try:
+        if isinstance(person, str):
+            lst_persons.append(person)
+            search_lst_persons()
+            person = lst_persons[0]
+
         genre = get_genre_person(person)
         return  person[genre]
     except:
@@ -223,6 +233,50 @@ def compare_casts(movies: Annotated[list[str], typer.Option(..., '-m', help="Un 
 
     create_tree_cast(resultats, lambda i: '')
 
+@imdb.command()
+def get_mean_rate(actor: str = typer.Option(..., '-n', help="Nom d'un acteur")):
+    # faire in callback puor remplir les listes
+    global lst_movies
+    lst_movies = get_filmo(actor)
+    search_lst_movies()
+
+    notes = []
+    for i in lst_movies:
+        try:
+            notes.append(float(i.get('rating')))
+        except Exception as e:
+            print(e)
+    c = 0
+    for i in notes:
+        c += i
+    print(c/len(notes))
+
+def insert_base():
+    global lst_movies
+    lst_movies = get_filmo('kubrick')
+    search_lst_movies()
+
+    with open('test.json', 'a') as a:
+        for i in lst_movies:
+            a.write(json.dumps(i.__dict__))
+
+    db = TinyDB(r'C:\Python\Projets\git_imdb\movies.json')
+    for i in lst_movies:
+        db.insert(i)
+
+@imdb.command()
+def test():
+    data100 = [i.get('rating') for i in ia.get_bottom100_movies()]
+    data250 = [i.get('rating') for i in ia.get_top250_movies()]
+    titres100 = [i.get('title') for i in ia.get_bottom100_movies()]
+    titres250 = [i.get('title') for i in ia.get_top250_movies()]
+    fig, ax = plt.subplots()
+   
+    ax.scatter(titres100+titres250, data100+data250)
+    
+    plt.show()
+
 if __name__ == '__main__':
     # appel de l'app avec typer
-    imdb()
+    #imdb()
+    insert_base()
