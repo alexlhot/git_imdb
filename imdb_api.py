@@ -111,7 +111,7 @@ def search_actors(name: Annotated[list[str], typer.Argument(..., help="Nom d'un 
     lst_persons = list(set_noms)
     # recherches
     search_lst_persons()
-    find_shared_movies()
+    find_shared_movies_actors()
 
 @run_in_thread
 def search_person(pers):
@@ -143,23 +143,50 @@ def create_link_movie(id):
 def create_link_person(id):
     return f'http://www.imdb.com/name/nm{id}'
 
-def find_shared_movies():
+def find_shared_movies_actors():
     # on cherche les films en communs de différents acteurs
     resultats = {}
+    resultats_dir = {}
 
     for x in range(2, len(lst_persons)+1):
         # création des combinaisons possibles de noms
         for p in itertools.combinations(lst_persons, x):
             lst_movies = set(get_filmo(p[0]))
-            noms = p[0]['name']
+            noms = p[0].get('name')
             # comparaison des sets de filmos
             for pers in p[1:]:               
                 lst_movies &= set(get_filmo(pers))
-                noms += f" - {pers['name']}"
+                noms += f" - {pers.get('name')}"
             resultats[noms] = lst_movies
-    
+            resultats_dir.update(find_shared_movies_directors(p))
+           
     create_tree_persons(resultats)
+    create_tree_persons(resultats_dir)
 
+def find_shared_movies_directors(persons):
+    # on cherche les films en communs de différents acteurs
+    resultats = {}
+    
+    lst_movies = set(get_filmo(persons[0], True))
+    noms = f"{persons[0].get('name')} (réalisateur)"
+    # comparaison des sets de filmos
+    for pers in persons[1:]:       
+        lst_movies &= set(get_filmo(pers))
+        # concaténation des noms communs
+        noms += f" - {pers.get('name')}"
+    resultats[noms] = lst_movies
+
+    lst_movies = set(get_filmo(persons[-1], True))
+    noms = f"{persons[-1].get('name')} (réalisateur)"
+    # comparaison des sets de filmos
+    for pers in persons[:-1]:       
+        lst_movies &= set(get_filmo(pers))
+        # concaténation des noms communs
+        noms += f" - {pers.get('name')}"
+        resultats[noms] = lst_movies
+
+    return resultats
+    
 #@run_in_thread
 def search_movie(film):
     # fonction de recherche pour chaque film
@@ -177,30 +204,39 @@ def search_lst_movies():
 
 def get_genre_person(person):
     # cherche si c'est un acteur et détermine le genre   
-    if 'actor' in person['filmography']:
-        return 'actor'
-    elif 'actress' in person['filmography']:
+    if 'actress' in person['filmography']:
         return 'actress'
+    return 'actor'
        
-def get_filmo(person):
+def get_filmo(person, isdir=False):
     # renvoie la filmo grâce au genre : actor/actress
     try:
         if isinstance(person, str):
             lst_persons.append(person)
             search_lst_persons()
             person = lst_persons[0]
-
+        if isdir and 'director' in person['filmography']:
+            return person['director']
+        
         genre = get_genre_person(person)
         return  person[genre]
     except:
         return []
  
 @imdb.command()
-def filmo(name: str = typer.Option(..., prompt="Acteur ", help="Un seul acteur à entrer")):
-    """Retourne la filmographie d'une personne"""
+def filmo_actor(name: str = typer.Option(..., prompt='Acteur ', help="Un seul acteur à entrer")):
+    """Retourne la filmographie d'un acteur"""    
     lst_persons.append(name)
     search_lst_persons()
     dico[lst_persons[0]] = get_filmo(lst_persons[0])
+    create_tree_persons(dico)
+
+@imdb.command()
+def filmo_dir(name: str = typer.Option(..., '-d', '-t', help="Un seul réalisateur à entrer")):
+    """Retourne la filmographie d'un réalisateur"""    
+    lst_persons.append(name)
+    search_lst_persons()
+    dico[lst_persons[0]] = get_filmo(lst_persons[0], True)
     create_tree_persons(dico)
 
 @imdb.command()
@@ -253,9 +289,10 @@ def get_mean_rate(actor: str = typer.Option(..., '-n', help="Nom d'un acteur")):
 
 def insert_base():
     global lst_movies
-    lst_movies = get_filmo('kubrick')
+    lst_movies = get_filmo('isaa rae')
     search_lst_movies()
-
+    for i in lst_movies:
+        print(i['rating'])
     with open('test.json', 'a') as a:
         for i in lst_movies:
             a.write(json.dumps(i.__dict__))
@@ -265,7 +302,7 @@ def insert_base():
         db.insert(i)
 
 @imdb.command()
-def test():
+def test_plot():
     data100 = [i.get('rating') for i in ia.get_bottom100_movies()]
     data250 = [i.get('rating') for i in ia.get_top250_movies()]
     titres100 = [i.get('title') for i in ia.get_bottom100_movies()]
@@ -278,5 +315,4 @@ def test():
 
 if __name__ == '__main__':
     # appel de l'app avec typer
-    #imdb()
-    insert_base()
+    imdb()
