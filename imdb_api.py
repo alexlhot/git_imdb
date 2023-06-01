@@ -5,6 +5,7 @@ from itertools import zip_longest
 import itertools
 import typer
 from typing_extensions import Annotated
+from typing import Optional
 from rich import *
 from rich.console import Console
 from rich.tree import Tree
@@ -77,6 +78,8 @@ def live_table():
         for _ in range(1000): # compteur empêchant l'update de cesser
             live.update(generate_table())
             time.sleep(0.5)
+            while threading.active_count() == 5:
+                time.sleep(0.5)
             if threading.active_count() == 2:
                 # quand les threads sont terminés
                 # (seuls le main et la boucle sont actifs)
@@ -85,7 +88,7 @@ def live_table():
                 break
 
 def run_in_thread(f):
-    # thread decorator
+    # thread decorator    
     def run(*args, **kwargs):
         thread = threading.Thread(target=f, args=args, kwargs=kwargs)     
         thread.start()
@@ -187,20 +190,25 @@ def find_shared_movies_directors(persons):
 
     return resultats
     
-#@run_in_thread
+@run_in_thread
 def search_movie(film):
     # fonction de recherche pour chaque film
     if isinstance(film, str): # vérifie si str ou obj Movie
         movie = ia.search_movie(film)[0]
     movie = ia.get_movie(film.movieID)
-    lst_movies.remove(film)
-    lst_movies.insert(0, movie)
+    lst_movies.append(movie)
 
 def search_lst_movies():
     # recherche de la liste de films via api
-    for m in lst_movies:
-        search_movie(m)  
+    lst_temp = []
+    [lst_temp.append(i) for i in lst_movies]
+    lst_movies.clear()
+
+    for m in lst_temp:
+        search_movie(m)
+
     live_table()
+    [lst_movies.remove(i) for i in lst_movies if i is None]
 
 def get_genre_person(person):
     # cherche si c'est un acteur et détermine le genre   
@@ -215,11 +223,15 @@ def get_filmo(person, isdir=False):
             lst_persons.append(person)
             search_lst_persons()
             person = lst_persons[0]
-        if isdir and 'director' in person['filmography']:
-            return person['director']
+        
+        if isdir and 'director' in person.get('filmography'):
+            liste = []
+            # on retourne uniquement les films d'un réal 
+            [liste.append(i) for i in person.get('director') if i.get('kind') == 'movie']
+            return liste
         
         genre = get_genre_person(person)
-        return  person[genre]
+        return  person.get(genre)
     except:
         return []
  
@@ -232,7 +244,7 @@ def filmo_actor(name: str = typer.Option(..., prompt='Acteur ', help="Un seul ac
     create_tree_persons(dico)
 
 @imdb.command()
-def filmo_dir(name: str = typer.Option(..., '-d', '-t', help="Un seul réalisateur à entrer")):
+def filmo_dir(name: str = typer.Option(..., '-d', help="Un seul réalisateur à entrer")):
     """Retourne la filmographie d'un réalisateur"""    
     lst_persons.append(name)
     search_lst_persons()
@@ -302,16 +314,32 @@ def insert_base():
         db.insert(i)
 
 @imdb.command()
-def test_plot():
-    data100 = [i.get('rating') for i in ia.get_bottom100_movies()]
-    data250 = [i.get('rating') for i in ia.get_top250_movies()]
-    titres100 = [i.get('title') for i in ia.get_bottom100_movies()]
-    titres250 = [i.get('title') for i in ia.get_top250_movies()]
-    fig, ax = plt.subplots()
-   
-    ax.scatter(titres100+titres250, data100+data250)
-    
+def plot(name: str = typer.Option(..., '-n', help='Nom personne'), isdir: Annotated[bool, typer.Argument()] = False,
+          n: Annotated[Optional[int], typer.Argument()] = None):
+    """Affiche un graphique des notes des n derniers films d'une personne"""
+    global lst_movies
+    dico = {}
+    temp_lst = []
+    # récupère les n derniers films d'une personne
+    lst_movies = get_filmo(name, isdir)[:n]
+    search_lst_movies()
+    # tri des films sans date ou note
+    for i in lst_movies:
+        if i.get('year') is not None and i.get('rating') is not None:
+            temp_lst.append(i)
+
+    temp_lst.sort(key=lambda i: i.get('year'))
+    # association date et note pour le plot
+    year, rating = [], []
+    for i in temp_lst:
+        year.append(i.get('year'))
+        rating.append(i.get('rating'))
+
+    plt.scatter([i.get('year') for i in temp_lst], [i.get('rating') for i in temp_lst])
+    plt.plot([i.get('year') for i in temp_lst], [i.get('rating') for i in temp_lst], label=ia.search_person(name)[0].get('name'))
+    plt.legend()
     plt.show()
+
 
 if __name__ == '__main__':
     # appel de l'app avec typer
