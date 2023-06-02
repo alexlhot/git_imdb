@@ -13,8 +13,7 @@ from rich.live import Live
 from rich.table import Table
 from imdb import Cinemagoer
 import matplotlib.pyplot as plt
-import json
-from tinydb import TinyDB, Query
+import mplcursors
 
 # création appli avec typer
 imdb = typer.Typer(name='IMDB', add_completion=False, help='Recherche IMDB')
@@ -35,11 +34,11 @@ def create_tree_persons(dico):
         movies_tree = tree.add(f'[green]{p}', guide_style="bright_black")
         # pour chaque film, création d'une sous-branche
         for movie in movies:
-            movies_tree.add( f"[orange1]{movie['title']} - [bold link={create_link_movie(movie.movieID)}][dodger_blue1]Movie Link[/]")
+            movies_tree.add( f"[orange1]{movie.get('title')} [green]({movie.get('year')}) - [bold link={create_link_movie(movie.movieID)}][dodger_blue1]Movie Link[/]")
     # liste des acteurs recherchés et de leur lien IMDB
     persons_tree = tree.add('[white]Liste des acteurs')
     for p in lst_persons:
-        persons_tree.add(f"[chartreuse4]{p['name']}[/] - [bold link={create_link_person(p.personID)}][dodger_blue1]Person Link[/]")
+        persons_tree.add(f"[chartreuse4]{p.get('name')}[/] - [bold link={create_link_person(p.personID)}][dodger_blue1]Person Link[/]")
 
     console.print(tree)
     console.print("")
@@ -53,7 +52,7 @@ def create_tree_cast(dico, func):
     for m, cast in dico.items(): 
         casting_tree = tree.add(f'[green]{m}', guide_style="bright_black")
         for i in cast: # chaque personne et son rôle dans une nouvelle branche
-            casting_tree.add( f"[yellow4]{i['name']} [orange1]{func(i)}[/] -  [bold link={create_link_person(i.personID)}][dodger_blue1]Person Link[/]")  
+            casting_tree.add( f"[yellow4]{i.get('name')} [orange1]{func(i)}[/] -  [bold link={create_link_person(i.personID)}][dodger_blue1]Person Link[/]")  
 
     console.print(tree)
     console.print("")  
@@ -77,9 +76,7 @@ def live_table():
     with Live(generate_table()) as live:
         for _ in range(1000): # compteur empêchant l'update de cesser
             live.update(generate_table())
-            time.sleep(0.5)
-            while threading.active_count() == 5:
-                time.sleep(0.5)
+            time.sleep(0.5)           
             if threading.active_count() == 2:
                 # quand les threads sont terminés
                 # (seuls le main et la boucle sont actifs)
@@ -135,7 +132,7 @@ def search_lst_persons():
         search_person(p)    
     live_table()
     # vérification de la recherche
-    [lst_persons.pop(i) for i in lst_persons if i is None]
+    [lst_persons.remove(i) for i in lst_persons if i is None]
     if isinstance(lst_persons[0], str) or isinstance(lst_persons[0], int):
         print('Nobody found.')
         sys.exit()
@@ -206,6 +203,10 @@ def search_lst_movies():
 
     for m in lst_temp:
         search_movie(m)
+        print(m)
+        if len(dico.keys()) % 3 == 0:
+            for th in dico.keys():
+                th.join()
 
     live_table()
     [lst_movies.remove(i) for i in lst_movies if i is None]
@@ -299,26 +300,26 @@ def get_mean_rate(actor: str = typer.Option(..., '-n', help="Nom d'un acteur")):
         c += i
     print(c/len(notes))
 
-def insert_base():
-    global lst_movies
-    lst_movies = get_filmo('isaa rae')
-    search_lst_movies()
+x, y = [], []
+def onpick(event):
+    ind = event.ind
+    x1 = x[int(ind)] 
+    y1 = y[int(ind)]
+    test = ''
     for i in lst_movies:
-        print(i['rating'])
-    with open('test.json', 'a') as a:
-        for i in lst_movies:
-            a.write(json.dumps(i.__dict__))
-
-    db = TinyDB(r'C:\Python\Projets\git_imdb\movies.json')
-    for i in lst_movies:
-        db.insert(i)
+        try:
+            if i.get('year') == x1 and i.get('rating') == y1:
+                test = i.get('title') 
+        except:
+            continue
+    plt.annotate(f'{test} ({x1}), {y1}', xy=(x1, y1), xytext=(x1, y1))
+    plt.draw()
 
 @imdb.command()
 def plot(name: str = typer.Option(..., '-n', help='Nom personne'), isdir: Annotated[bool, typer.Argument()] = False,
           n: Annotated[Optional[int], typer.Argument()] = None):
     """Affiche un graphique des notes des n derniers films d'une personne"""
-    global lst_movies
-    dico = {}
+    global lst_movies, x, y
     temp_lst = []
     # récupère les n derniers films d'une personne
     lst_movies = get_filmo(name, isdir)[:n]
@@ -329,18 +330,29 @@ def plot(name: str = typer.Option(..., '-n', help='Nom personne'), isdir: Annota
             temp_lst.append(i)
 
     temp_lst.sort(key=lambda i: i.get('year'))
-    # association date et note pour le plot
-    year, rating = [], []
-    for i in temp_lst:
-        year.append(i.get('year'))
-        rating.append(i.get('rating'))
-
-    plt.scatter([i.get('year') for i in temp_lst], [i.get('rating') for i in temp_lst])
-    plt.plot([i.get('year') for i in temp_lst], [i.get('rating') for i in temp_lst], label=ia.search_person(name)[0].get('name'))
+    # association date et note pour le graph
+    x = [i.get('year') for i in temp_lst]
+    y = [i.get('rating') for i in temp_lst]
+    titles =  [i.get('title') for i in temp_lst]
+    # création de l'event click sur le scatter
+    fig, ax = plt.subplots()
+    fig.canvas.mpl_connect('pick_event', onpick)
+  
+    # calcul scatter dots
+    colors = [i * 10 for i in y]
+    sizes = [i * 25 for i in y]
+    # création du graph
+    scatter = plt.scatter(x, y, picker=True, c=colors, s=sizes, alpha=0.5, cmap='nipy_spectral',
+                 label=ia.search_person(name)[0])
+    plt.clim(0, 100)
+    #plt.plot(x, y, label=ia.search_person(name)[0].get('name'))
+    # création event hover
+    mplcursors.cursor(scatter, hover=True).connect('add', lambda x: x.annotation.set_text(titles[x.target.index]))
+    
+    plt.colorbar()
     plt.legend()
     plt.show()
 
-
 if __name__ == '__main__':
-    # appel de l'app avec typer
+    # appel de l'app avec typer 
     imdb()
