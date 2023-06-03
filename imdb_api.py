@@ -20,8 +20,8 @@ ia = Cinemagoer()
 lst_persons = []
 lst_movies = []
 dico = {}
-dico_th = {}
 liste_th = []
+nb_threads = 10
 
 def create_tree_persons(dico): 
     console = Console(record=True, width=100)
@@ -76,10 +76,13 @@ def live_table():
             live.update(generate_table())
             if threading.active_count() == 2:
                 for i, j in enumerate(liste_th):
-                    if i < 3:
+                    # nb_threads limite le nb de threads 
+                    if i < nb_threads:
                         try:
                             th = liste_th[0][0]
-                            liste_th[0][2] = True
+                            liste_th[0][2] = True # status du thread :  il démarre
+                            # on supprime le premier élément et on l'ajoute à la fin
+                            # pour boucler sur toute la liste, nb_thread limitant l'itération 
                             liste_th.append(liste_th.pop(0))
                             th.start()
                         except:
@@ -89,16 +92,22 @@ def live_table():
                 live.update(generate_table())
                 time.sleep(0.5)
                 break
-                                
 
 def run_in_thread(f):
     # thread decorator
     def run(*args, **kwargs):
         thread = threading.Thread(target=f, args=args, kwargs=kwargs)
-        # ajout dans un dico pour connaitre le status
+        # ajout dans une liste pour connaitre le status
         # et l'associer à une recherche
-        dico_th[thread] = args[0]
         liste_th.append([thread, args[0], False])
+    return run
+
+def stopwatch(f):
+    def run(*args, **kwargs):
+        debut = time.perf_counter()
+        func = f
+        print(time.perf_counter() - debut)
+        return func()
     return run
 
 def liste_th_is_done():
@@ -236,6 +245,7 @@ def get_filmo(person, isdir=False):
         liste = []
         # on retourne uniquement les films d'un réal 
         [liste.append(i) for i in person.get('director') if i.get('kind') == 'movie']
+        liste.sort(key=lambda x: x.get('year'))
         return liste
     
     genre = get_genre_person(person)
@@ -291,36 +301,41 @@ def compare_casts(movies: Annotated[list[str], typer.Option(..., '-m', help="Un 
     create_tree_cast(resultats, lambda i: '')
 
 @imdb.command()
-def get_mean_rate(actor: str = typer.Option(..., '-n', help="Nom d'un acteur")):
+def get_mean_rate(name: str = typer.Option(..., '-n', help='Nom personne'), isdir: Annotated[bool, typer.Argument()] = False,
+          f: Annotated[Optional[int], typer.Argument('-f')] = None, d: Annotated[Optional[int], typer.Argument('-d')] = None):
     # faire un callback pour remplir les listes
     global lst_movies
-    lst_movies = get_filmo(actor)
+    if f == 0:
+        f = None
+    # on récupère de n à n éléments de la filmo
+    lst_movies = get_filmo(name, isdir)
+    # tri des films sans date ou note 
+    liste = []
+    [liste.append(i) for i in lst_movies if i.get('year')]
+    liste.sort(key=lambda x: x.get('year'))
+    lst_movies = liste[d:f]
     search_lst_movies()
 
-    notes = []
-    for i in lst_movies:
-        try:
-            notes.append(float(i.get('rating')))
-        except Exception as e:
-            print(e)
+    notes = []   
+    [notes.append(float(i.get('rating'))) for i in lst_movies if i.get('rating')]
     c = 0
     for i in notes:
         c += i
-    print(c/len(notes))
+    print("{:.1f}".format(c/len(notes)))
 
 x, y = [], []
 def onpick(event):
     ind = event.ind
     x1 = x[int(ind)] 
     y1 = y[int(ind)]
-    test = ''
+    title = ''
     for i in lst_movies:
         try:
             if i.get('year') == x1 and i.get('rating') == y1:
-                test = i.get('title') 
+                title = i.get('title') 
         except:
             continue
-    plt.annotate(f'{test} ({x1}), {y1}', xy=(x1, y1), xytext=(x1, y1))
+    plt.annotate(f'{title} ({x1}), {y1}', xy=(x1, y1), xytext=(x1, y1))
     plt.draw()
 
 @imdb.command()
@@ -334,7 +349,7 @@ def plot(name: str = typer.Option(..., '-n', help='Nom personne'), isdir: Annota
     search_lst_movies()
     # tri des films sans date ou note
     for i in lst_movies:
-        if i.get('year') is not None and i.get('rating') is not None:
+        if i.get('year') and i.get('rating'):
             temp_lst.append(i)
 
     temp_lst.sort(key=lambda i: i.get('year'))
@@ -365,8 +380,8 @@ def plot(name: str = typer.Option(..., '-n', help='Nom personne'), isdir: Annota
 if __name__ == '__main__':
     # appel de l'app avec typer
     #imdb()
-    plot('bruce willis')
-    #7.8 all threads
-    #20 3 th
-    #43 0 th
+    get_mean_rate('bruce willis', False, 0, -10)
+    #  threads
+    #41 3 th
+    # 0 th
 
