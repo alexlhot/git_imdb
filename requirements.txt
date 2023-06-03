@@ -1,0 +1,6 @@
+IMDbPY==2022.7.9
+matplotlib==3.7.1
+mplcursors==0.5.2
+rich==13.4.1
+typer==0.9.0
+typing_extensions==4.6.3
