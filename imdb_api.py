@@ -1,6 +1,5 @@
 import threading
 import time
-import sys
 from itertools import zip_longest
 import itertools
 import typer
@@ -22,6 +21,8 @@ lst_persons = []
 lst_movies = []
 dico = {}
 dico_th = {}
+liste_th = []
+event = threading.Event()
 
 def create_tree_persons(dico): 
     console = Console(record=True, width=100)
@@ -34,7 +35,7 @@ def create_tree_persons(dico):
         movies_tree = tree.add(f'[green]{p}', guide_style="bright_black")
         # pour chaque film, création d'une sous-branche
         for movie in movies:
-            movies_tree.add( f"[orange1]{movie.get('title')} [green]({movie.get('year')}) - [bold link={create_link_movie(movie.movieID)}][dodger_blue1]Movie Link[/]")
+            movies_tree.add(f"[orange1]{movie.get('title')} [green]({movie.get('year')}) - [bold link={create_link_movie(movie.movieID)}][dodger_blue1]Movie Link[/]")
     # liste des acteurs recherchés et de leur lien IMDB
     persons_tree = tree.add('[white]Liste des acteurs')
     for p in lst_persons:
@@ -63,12 +64,10 @@ def generate_table() -> Table:
     table.add_column('Personne')
     table.add_column('Recherche')
 
-    for th, p in dico_th.items():
-        nom = p
-        # si c'est un objet Person, on récupère le nom
-        if not isinstance(nom, str):
-            nom = p['title']
-        table.add_row(nom, "[red]En cours" if th.is_alive() else "[green]Terminée")
+    for th, p, bool in liste_th:
+        # si c'est un objet Person, on récupère le nom 
+        nom = lambda x: x.get('title') if not isinstance(x, str) else x
+        table.add_row(nom(p), "[red]En cours" if not bool else "[green]Terminée")
     return table
 
 def live_table():
@@ -76,24 +75,35 @@ def live_table():
     with Live(generate_table()) as live:
         for _ in range(1000): # compteur empêchant l'update de cesser
             live.update(generate_table())
-            time.sleep(0.5)           
             if threading.active_count() == 2:
-                # quand les threads sont terminés
-                # (seuls le main et la boucle sont actifs)
+                for i in range(0, 3):
+                    try:
+                        liste_th[i][0].start()
+                        liste_th[i][2] = True
+                    except:
+                        continue
+            time.sleep(0.5)
+            if liste_th_is_done() and threading.active_count() == 2:
                 live.update(generate_table())
                 time.sleep(0.5)
                 break
+                                
 
 def run_in_thread(f):
-    # thread decorator    
+    # thread decorator
     def run(*args, **kwargs):
-        thread = threading.Thread(target=f, args=args, kwargs=kwargs)     
-        thread.start()
+        thread = threading.Thread(target=f, args=args, kwargs=kwargs)
         # ajout dans un dico pour connaitre le status
         # et l'associer à une recherche
         dico_th[thread] = args[0]
-        return thread
+        liste_th.append([thread, args[0], False])
     return run
+
+def liste_th_is_done():
+    for i in liste_th:
+        if not i[2]:
+            return False
+    return True
 
 @imdb.command()
 def search_actors(name: Annotated[list[str], typer.Argument(..., help="Nom d'un acteur")]):
@@ -119,23 +129,22 @@ def search_person(pers):
     try:
         persons = ia.search_person(pers)
         person = ia.get_person(persons[0].personID)
-        # on utilise la même liste en remplaçant les str
-        # par les objets Person
-        lst_persons.remove(pers) 
-        lst_persons.insert(0, person)
+        lst_persons.append(person)        
     except:
         print(f'search_person, {pers} not found.')
 
 def search_lst_persons():
     # recherche de la liste de personnes via api
-    for p in lst_persons:
-        search_person(p)    
+    liste = [i for i in lst_persons]
+    lst_persons.clear()
+    for p in liste:
+        search_person(p)
     live_table()
     # vérification de la recherche
     [lst_persons.remove(i) for i in lst_persons if i is None]
     if isinstance(lst_persons[0], str) or isinstance(lst_persons[0], int):
         print('Nobody found.')
-        sys.exit()
+        exit()
 
 def create_link_movie(id):
     return f'http://www.imdb.com/title/tt{id}'
@@ -203,12 +212,8 @@ def search_lst_movies():
 
     for m in lst_temp:
         search_movie(m)
-        print(m)
-        if len(dico.keys()) % 3 == 0:
-            for th in dico.keys():
-                th.join()
-
-    live_table()
+  
+    live_table()   
     [lst_movies.remove(i) for i in lst_movies if i is None]
 
 def get_genre_person(person):
@@ -219,22 +224,23 @@ def get_genre_person(person):
        
 def get_filmo(person, isdir=False):
     # renvoie la filmo grâce au genre : actor/actress
-    try:
-        if isinstance(person, str):
-            lst_persons.append(person)
-            search_lst_persons()
-            person = lst_persons[0]
-        
-        if isdir and 'director' in person.get('filmography'):
-            liste = []
-            # on retourne uniquement les films d'un réal 
-            [liste.append(i) for i in person.get('director') if i.get('kind') == 'movie']
-            return liste
-        
-        genre = get_genre_person(person)
-        return  person.get(genre)
-    except:
-        return []
+    """try:"""
+    if isinstance(person, str):
+        lst_persons.append(person)
+        search_lst_persons()
+        person = lst_persons[0]
+    
+    if isdir and 'director' in person.get('filmography'):
+        liste = []
+        # on retourne uniquement les films d'un réal 
+        [liste.append(i) for i in person.get('director') if i.get('kind') == 'movie']
+        return liste
+    
+    genre = get_genre_person(person)
+    return  person.get(genre)
+    """except Exception as e:
+        print(e)
+        return []"""
  
 @imdb.command()
 def filmo_actor(name: str = typer.Option(..., prompt='Acteur ', help="Un seul acteur à entrer")):
@@ -339,20 +345,26 @@ def plot(name: str = typer.Option(..., '-n', help='Nom personne'), isdir: Annota
     fig.canvas.mpl_connect('pick_event', onpick)
   
     # calcul scatter dots
-    colors = [i * 10 for i in y]
-    sizes = [i * 25 for i in y]
+    colors = [i for i in y]
+    sizes = [i * 75 for i in y]
     # création du graph
-    scatter = plt.scatter(x, y, picker=True, c=colors, s=sizes, alpha=0.5, cmap='nipy_spectral',
+    scatter = plt.scatter(x, y, picker=True, c=colors, s=sizes, alpha=0.5, cmap='RdYlGn',
                  label=ia.search_person(name)[0])
-    plt.clim(0, 100)
-    #plt.plot(x, y, label=ia.search_person(name)[0].get('name'))
+    plt.ylim(1, 10)
+    plt.clim(1, 10)
+    #plt.plot(x, y)
     # création event hover
-    mplcursors.cursor(scatter, hover=True).connect('add', lambda x: x.annotation.set_text(titles[x.target.index]))
+    mplcursors.cursor(scatter, hover=True).connect('add', lambda x: x.annotation.set_text(titles[x.index]))
     
     plt.colorbar()
     plt.legend()
     plt.show()
 
 if __name__ == '__main__':
-    # appel de l'app avec typer 
-    imdb()
+    # appel de l'app avec typer
+    #imdb()
+    plot('jake lloyd')
+    #7.8 all threads
+    #20 3 th
+    #43 0 th
+
