@@ -22,7 +22,6 @@ lst_movies = []
 dico = {}
 dico_th = {}
 liste_th = []
-event = threading.Event()
 
 def create_tree_persons(dico): 
     console = Console(record=True, width=100)
@@ -76,12 +75,15 @@ def live_table():
         for _ in range(1000): # compteur empêchant l'update de cesser
             live.update(generate_table())
             if threading.active_count() == 2:
-                for i in range(0, 3):
-                    try:
-                        liste_th[i][0].start()
-                        liste_th[i][2] = True
-                    except:
-                        continue
+                for i, j in enumerate(liste_th):
+                    if i < 3:
+                        try:
+                            th = liste_th[0][0]
+                            liste_th[0][2] = True
+                            liste_th.append(liste_th.pop(0))
+                            th.start()
+                        except:
+                            continue
             time.sleep(0.5)
             if liste_th_is_done() and threading.active_count() == 2:
                 live.update(generate_table())
@@ -290,7 +292,7 @@ def compare_casts(movies: Annotated[list[str], typer.Option(..., '-m', help="Un 
 
 @imdb.command()
 def get_mean_rate(actor: str = typer.Option(..., '-n', help="Nom d'un acteur")):
-    # faire in callback puor remplir les listes
+    # faire un callback pour remplir les listes
     global lst_movies
     lst_movies = get_filmo(actor)
     search_lst_movies()
@@ -363,7 +365,7 @@ def plot(name: str = typer.Option(..., '-n', help='Nom personne'), isdir: Annota
 if __name__ == '__main__':
     # appel de l'app avec typer
     #imdb()
-    plot('jake lloyd')
+    plot('bruce willis')
     #7.8 all threads
     #20 3 th
     #43 0 th
