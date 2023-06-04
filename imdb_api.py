@@ -378,6 +378,35 @@ def plot(name: str = typer.Option(..., '-n', help='Nom personne'), isdir: Annota
     plt.legend()
     plt.show()
 
+@imdb.command()
+def proba(name: str = typer.Option(..., '-n', help='Nom personne')):
+    """Calcul la note probable du prochain film d'une personne"""
+    global lst_movies
+    lst_movies = get_filmo(name)
+    search_lst_movies()
+    liste = []
+    for i in lst_movies:
+        if i.get('rating') and i.get('year'):
+            liste.append(i)
+
+    liste.sort(key=lambda x: x.get('year'))
+    movie = liste.pop()
+    dico = {}
+
+    for i in liste:
+        p = i.get('rating')
+        if p in dico:
+            dico[p] += 1
+        else:
+            dico[p] = 1
+
+    proba = {}
+    for note, freq in dico.items():
+        proba[note] = freq / len(liste)
+    print(movie, movie.get('rating'), movie.get('year'))
+    dict(sorted(proba.items(), key=lambda x: x[1]))
+    print(list(proba.items())[0])
+
 if __name__ == '__main__':
     # appel de l'app avec typer
     imdb()
