@@ -13,6 +13,7 @@ from rich.table import Table
 from imdb import Cinemagoer
 import matplotlib.pyplot as plt
 import mplcursors
+import statistics
 
 # création appli avec typer
 imdb = typer.Typer(name='IMDB', add_completion=False, help='Recherche IMDB')
@@ -63,17 +64,11 @@ def generate_table() -> Table:
     table.add_column('Personne')
     table.add_column('Recherche')
     
-
     for th, p, bool in liste_th:       
         if bool:
             # si c'est un objet Person, on récupère le nom 
             nom = lambda x: x.get('title') if not isinstance(x, str) else x
-            table.add_row(nom(p), "[red]En cours" if th.is_alive() else "[green]Terminée")
-        if not th.is_alive():
-            try:
-                table.rows.pop(0)
-            except:
-                continue
+            table.add_row(nom(p), "[red]En cours" if th.is_alive() else "[green]Terminée")     
     return table
 
 def live_table():
@@ -153,11 +148,13 @@ def search_person(pers):
 
 def search_lst_persons():
     # recherche de la liste de personnes via api
-    liste = [i for i in lst_persons]
+    liste = lst_persons[:]
     lst_persons.clear()
+
     for p in liste:
         search_person(p)
     live_table()
+
     # vérification de la recherche
     [lst_persons.remove(i) for i in lst_persons if i is None]
     if isinstance(lst_persons[0], str) or isinstance(lst_persons[0], int):
@@ -224,8 +221,7 @@ def search_movie(film):
 
 def search_lst_movies():
     # recherche de la liste de films via api
-    lst_temp = []
-    [lst_temp.append(i) for i in lst_movies]
+    lst_temp = lst_movies[:]
     lst_movies.clear()
 
     for m in lst_temp:
@@ -248,11 +244,9 @@ def get_filmo(person, isdir=False):
         search_lst_persons()
         person = lst_persons[0]
     
-    if isdir and 'director' in person.get('filmography'):
-        liste = []
+    if isdir and 'director' in person.get('filmography'):        
         # on retourne uniquement les films d'un réal 
-        [liste.append(i) for i in person.get('director') if i.get('kind') == 'movie']
-        liste.sort(key=lambda x: x.get('year'))
+        liste = [i for i in person.get('director') if i.get('kind') == 'movie']
         return liste
     
     genre = get_genre_person(person)
@@ -260,7 +254,7 @@ def get_filmo(person, isdir=False):
     """except Exception as e:
         print(e)
         return []"""
- 
+
 @imdb.command()
 def filmo_actor(name: str = typer.Option(..., prompt='Acteur ', help="Un seul acteur à entrer")):
     """Retourne la filmographie d'un acteur"""    
@@ -290,7 +284,7 @@ def cast(title: str = typer.Option(..., prompt="Film ", help="Un seul titre à e
 @imdb.command()
 def compare_casts(movies: Annotated[list[str], typer.Option(..., '-m', help="Un titre par argument")]):
     """Compare le casting de plusieurs films"""
-    [lst_movies.append(m) for m in movies]
+    lst_movies = movies[:]
     search_lst_movies()
     resultats = {}
 
@@ -312,6 +306,8 @@ def get_mean_rate(name: str = typer.Option(..., '-n', help='Nom personne'), isdi
           d: Annotated[Optional[int], typer.Argument()] = None, f: Annotated[Optional[int], typer.Argument()] = None):
     # faire un callback pour remplir les listes
     global lst_movies
+    liste_films, notes = [], []
+
     if f == 0:
         f = None
     if d == 0:
@@ -319,18 +315,12 @@ def get_mean_rate(name: str = typer.Option(..., '-n', help='Nom personne'), isdi
     # on récupère de n à n éléments de la filmo
     lst_movies = get_filmo(name, isdir)
     # tri des films sans date ou note 
-    liste = []
-    [liste.append(i) for i in lst_movies if i.get('year')]
-    liste.sort(key=lambda x: x.get('year'))
-    lst_movies = liste[d:f]
+    [liste_films.append(i) for i in lst_movies if i.get('year') and i.get('rating')]
+    liste_films.sort(key=lambda x: x.get('year'))
+    lst_movies = liste_films[d:f]
     search_lst_movies()
 
-    notes = []   
-    [notes.append(float(i.get('rating'))) for i in lst_movies if i.get('rating')]
-    c = 0
-    for i in notes:
-        c += i
-    print("{:.1f}".format(c/len(notes)))
+    print("{:.1f}".format(statistics.mean(lst_movies)))
 
 x, y = [], []
 def onpick(event):
@@ -357,9 +347,7 @@ def plot(name: str = typer.Option(..., '-n', help='Nom personne'), isdir: Annota
     lst_movies = get_filmo(name, isdir)[:n]
     search_lst_movies()
     # tri des films sans date ou note
-    for i in lst_movies:
-        if i.get('year') and i.get('rating'):
-            temp_lst.append(i)
+    [temp_lst.append(i) for i in lst_movies if i.get('year') and i.get('rating')]
 
     temp_lst.sort(key=lambda i: i.get('year'))
     # association date et note pour le graph
@@ -376,6 +364,11 @@ def plot(name: str = typer.Option(..., '-n', help='Nom personne'), isdir: Annota
     # création du graph
     scatter = plt.scatter(x, y, picker=True, c=colors, s=sizes, alpha=0.5, cmap='RdYlGn',
                  label=ia.search_person(name)[0])
+    # calcul moyenne
+    plt.axhline(statistics.mean(y), color='b')
+    # calcul médiane
+    plt.axhline(statistics.median(y), color='r')
+
     plt.ylim(1, 10)
     plt.clim(1, 10)
     # création event hover
