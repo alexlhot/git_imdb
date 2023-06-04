@@ -21,7 +21,7 @@ lst_persons = []
 lst_movies = []
 dico = {}
 liste_th = []
-nb_threads = 10
+nb_threads = 15
 
 def create_tree_persons(dico): 
     console = Console(record=True, width=100)
@@ -62,11 +62,18 @@ def generate_table() -> Table:
     table = Table()
     table.add_column('Personne')
     table.add_column('Recherche')
+    
 
-    for th, p, bool in liste_th:
-        # si c'est un objet Person, on récupère le nom 
-        nom = lambda x: x.get('title') if not isinstance(x, str) else x
-        table.add_row(nom(p), "[red]En cours" if not bool else "[green]Terminée")
+    for th, p, bool in liste_th:       
+        if bool:
+            # si c'est un objet Person, on récupère le nom 
+            nom = lambda x: x.get('title') if not isinstance(x, str) else x
+            table.add_row(nom(p), "[red]En cours" if th.is_alive() else "[green]Terminée")
+        if not th.is_alive():
+            try:
+                table.rows.pop(0)
+            except:
+                continue
     return table
 
 def live_table():
@@ -301,12 +308,14 @@ def compare_casts(movies: Annotated[list[str], typer.Option(..., '-m', help="Un 
     create_tree_cast(resultats, lambda i: '')
 
 @imdb.command()
-def get_mean_rate(name: str = typer.Option(..., '-n', help='Nom personne'), isdir: Annotated[bool, typer.Argument()] = False,
-          f: Annotated[Optional[int], typer.Argument('-f')] = None, d: Annotated[Optional[int], typer.Argument('-d')] = None):
+def get_mean_rate(name: str = typer.Option(..., '-n', help='Nom personne'), isdir: Annotated[Optional[bool], typer.Argument()] = False,
+          d: Annotated[Optional[int], typer.Argument()] = None, f: Annotated[Optional[int], typer.Argument()] = None):
     # faire un callback pour remplir les listes
     global lst_movies
     if f == 0:
         f = None
+    if d == 0:
+        d = None
     # on récupère de n à n éléments de la filmo
     lst_movies = get_filmo(name, isdir)
     # tri des films sans date ou note 
@@ -369,7 +378,6 @@ def plot(name: str = typer.Option(..., '-n', help='Nom personne'), isdir: Annota
                  label=ia.search_person(name)[0])
     plt.ylim(1, 10)
     plt.clim(1, 10)
-    #plt.plot(x, y)
     # création event hover
     mplcursors.cursor(scatter, hover=True).connect('add', lambda x: x.annotation.set_text(titles[x.index]))
     
@@ -379,9 +387,4 @@ def plot(name: str = typer.Option(..., '-n', help='Nom personne'), isdir: Annota
 
 if __name__ == '__main__':
     # appel de l'app avec typer
-    #imdb()
-    get_mean_rate('bruce willis', False, 0, -10)
-    #  threads
-    #41 3 th
-    # 0 th
-
+    imdb()
