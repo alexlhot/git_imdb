@@ -235,7 +235,19 @@ def get_genre_person(person):
     if 'actress' in person['filmography']:
         return 'actress'
     return 'actor'
-       
+
+def get_filmo_sorted(name):
+    global lst_movies
+    lst_movies = get_filmo(name)
+    search_lst_movies()
+    liste = []
+    for i in lst_movies:
+        if i.get('rating') and i.get('year'):
+            liste.append(i)
+    lst_movies.clear()
+    liste.sort(key=lambda x: x.get('year'))
+    return liste
+
 def get_filmo(person, isdir=False):
     # renvoie la filmo grâce au genre : actor/actress
     """try:"""
@@ -381,15 +393,7 @@ def plot(name: str = typer.Option(..., '-n', help='Nom personne'), isdir: Annota
 @imdb.command()
 def proba(name: str = typer.Option(..., '-n', help='Nom personne')):
     """Calcul la note probable du prochain film d'une personne"""
-    global lst_movies
-    lst_movies = get_filmo(name)
-    search_lst_movies()
-    liste = []
-    for i in lst_movies:
-        if i.get('rating') and i.get('year'):
-            liste.append(i)
-
-    liste.sort(key=lambda x: x.get('year'))
+    liste = get_filmo_sorted(name)
     movie = liste.pop()
     dico = {}
 
