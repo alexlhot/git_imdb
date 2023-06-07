@@ -3,6 +3,7 @@ import time
 from itertools import zip_longest
 import itertools
 import typer
+import tqdm
 from typing_extensions import Annotated
 from typing import Optional
 from rich import *
@@ -347,18 +348,48 @@ def mean(name: str = typer.Option(..., '-n', help='Nom personne'), isdir: Annota
 
 @imdb.command()
 def best_mean():
-    lst_films = []
-    lst_means = []
+    set_films = set()
+    set_actors = set()
+    lst_ratings = []
     dico = {}
     movies = ia.get_top250_movies()
-    for movie in movies[:1]:
-        ia.update(movie)      
-        for p in movie.get('cast'):
-            print(p)
-            filmo = ia.get_person_filmography(p.personID)
-            for m in filmo['data']['filmography'][lambda: 'actress' if 'actress' else 'actor']:              
-                lst_films.append(m)
-    print(len(lst_films))
+    
+    bar_movies = tqdm.tqdm(movies[:1], position=0)
+    for movie in bar_movies:
+        set_actors.clear()
+        bar_movies.set_description(movie.get('title'))
+        ia.update(movie)
+        bar_persons = tqdm.tqdm(movie.get('cast'), position=1, leave=False)
+        for p in bar_persons:
+            bar_persons.set_description(p.get('name'))
+            set_actors.add(p)
+    
+    bar_actors = tqdm.tqdm(set_actors, position=0, leave=True)
+    for pers in bar_actors:
+        set_films.clear()
+        bar_actors.set_description(pers.get('name'))
+        filmo = ia.get_person_filmography(pers.personID)
+        if 'actor' in filmo['data']['filmography']:
+            for m in filmo['data']['filmography']['actor']:
+                set_films.add(m)
+            dico[pers] = list(set_films)
+        else:
+            for m in filmo['data']['filmography']['actress']:
+                set_films.add(m)
+            dico[pers] = list(set_films)
+
+    bar_pers = tqdm.tqdm(dico.keys(), position=0)
+    bar_ratings = tqdm.tqdm(dico.values(), position=1, leave=False)
+    for p in bar_pers:
+        bar_pers.set_description(p.get('name'))
+        lst_ratings.clear()
+        for i, m in enumerate(bar_ratings):
+            bar_ratings.set_description(m[i].get('title'))
+            ia.update(m[i])
+            if m[i].get('rating'):
+                lst_ratings.append(m[i].get('rating'))
+        print(p.get('name'), statistics.mean(lst_ratings))
+
 
 @stopwatch
 def test():    
