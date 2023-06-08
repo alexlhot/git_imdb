@@ -165,7 +165,6 @@ def search_lst_persons():
     # recherche de la liste de personnes via api
     liste = lst_persons[:]
     lst_persons.clear()
-
     for p in liste:
         search_person(p)
     live_table()
@@ -184,7 +183,7 @@ def search_movie(film):
     movie = ia.get_movie(film.movieID)
     lst_movies.append(movie)
 
-def search_lst_movies():
+def search_lst_movies(title):
     # recherche de la liste de films via api
     lst_temp = lst_movies[:]
     lst_movies.clear()
@@ -202,6 +201,25 @@ def create_link_person(id):
     return f'http://www.imdb.com/name/nm{id}'
 
 #-------------------------- Utils --------------------------#
+def get_persons(name):
+    # recherche une liste de personnes
+    for p in [name]:
+        lst_persons.append(p)
+        search_lst_persons()
+    # retourne la personne si liste == 1
+    # sinon lst_person est feed dans 'search_lst_persons()'
+    if len(lst_persons) == 1:
+        name = lst_persons[0]
+        return name
+    
+def get_movies(title):
+    # même fonctionnement que la précédente
+    for m in [title]:
+        lst_movies.append(m)
+        search_lst_movies()
+    if len(lst_movies) == 1:
+        return lst_movies[0]
+        
 def find_shared_movies_actors():
     # on cherche les films en communs de différents acteurs
     resultats = {}
@@ -248,11 +266,8 @@ def find_shared_movies_directors(persons):
 
 def get_filmo(person, isdir=False, isSorted=False):
     # renvoie la filmo grâce au genre : actor/actress
-    if isinstance(person, str):
-        lst_persons.append(person)
-        search_lst_persons()
-        person = lst_persons[0]
-    if isdir and 'director' in person.get('filmography'):        
+    person = get_persons(person)  
+    if isdir and 'director' in person.get('filmography'):      
         # on retourne uniquement les films d'un réal 
         filmo = [i for i in person.get('director') if i.get('kind') == 'movie']
     else:
@@ -312,35 +327,24 @@ def test_search_actors(name: Annotated[list[str], typer.Argument(..., help="Nom 
     find_shared_movies_actors()
 
 @imdb.command()
-def filmo_actor(name: str = typer.Option(..., '-n', help="Un seul acteur à entrer")):
-    """Retourne la filmographie d'un acteur"""    
-    lst_persons.append(name)
-    search_lst_persons()
-    dico[lst_persons[0]] = get_filmo(lst_persons[0])
+def filmo(name: str = typer.Argument(..., help="Une seule personne à entrer"),  isdir: Annotated[Optional[bool], typer.Argument()] = False):
+    """Retourne la filmographie d'un acteur ou réalisateur"""
+    dico[name] = get_filmo(name, isdir)
     create_tree_persons(dico)
 
 @imdb.command()
-def filmo_dir(name: str = typer.Option(..., '-d', help="Un seul réalisateur à entrer")):
-    """Retourne la filmographie d'un réalisateur"""    
-    lst_persons.append(name)
-    search_lst_persons()
-    dico[lst_persons[0]] = get_filmo(lst_persons[0], True)
-    create_tree_persons(dico)
+def cast(title: str = typer.Argument(..., help="Un seul titre à entrer")):
+    """Retourne le casting d'un film."""
+    # recherche du film   
+    movie = get_movies(title)
 
-@imdb.command()
-def cast(title: str = typer.Option(..., '-t', help="Un seul titre à entrer")):
-    """Retourne le casting d'un seul film."""
-    lst_movies.append(title)
-    search_lst_movies()
-    movie = lst_movies[0]
-    dico[movie] = movie['cast']
+    dico[movie] = movie.get('cast')
     create_tree_cast(dico, lambda i: f'({i.currentRole}) ')
 
 @imdb.command()
-def compare_casts(movies: Annotated[list[str], typer.Option(..., '-m', help="Un titre par argument")]):
+def compare_casts(title: Annotated[list[str], typer.Option(..., '-t', help="Un titre par argument")]):
     """Compare le casting de plusieurs films"""
-    lst_movies = movies[:]
-    search_lst_movies()
+    get_movies(title)
     resultats = {}
 
     for x in range(2, len(lst_movies)+1):
@@ -472,5 +476,5 @@ def proba(name: str = typer.Option(..., '-n', help='Nom personne')):
 
 if __name__ == '__main__':
     # appel de l'app avec typer
-    test_search_actors(['jake lloyd', 'keanu reeves', 'commo'])
-    #imdb()
+    #filmo_actor('jake lloyd')
+    imdb()
