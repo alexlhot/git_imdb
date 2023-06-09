@@ -3,7 +3,6 @@ import time, sys
 from itertools import zip_longest
 import itertools
 import typer
-import tqdm
 from typing_extensions import Annotated
 from typing import Optional
 from rich import *
@@ -24,7 +23,14 @@ lst_persons = []
 lst_movies = []
 dico = {}
 liste_th = []
-nb_threads = 17
+nb_threads_max = 17
+
+#-------------------------- Link IMDB --------------------------#
+def create_link_movie(id):
+    return f'http://www.imdb.com/title/tt{id}'
+
+def create_link_person(id):
+    return f'http://www.imdb.com/name/nm{id}'
 
 #-------------------------- Création tree --------------------------#
 def create_tree_persons(dico): 
@@ -67,10 +73,10 @@ def generate_table() -> Table:
     table = Table()
     table.add_column('Personne')
     table.add_column('Recherche')
-    
+
     for th, p, bool in liste_th:       
         if bool:
-            # si c'est un objet Person, on récupère le nom 
+            # si c'est un objet Person oi Movie
             nom = lambda x: x.get('title') if not isinstance(x, str) else x
             table.add_row(nom(p), "[red]En cours" if th.is_alive() else "[green]Terminée")     
     return table
@@ -78,50 +84,20 @@ def generate_table() -> Table:
 def live_table():
     # gestion de l'affichage des table de recherche
     with Live(generate_table()) as live:
-        for _ in range(1000): # compteur empêchant l'update de cesser
+        while True:
             live.update(generate_table())
-            if threading.active_count() == 2: # lancement de threads 
-                for i, th in enumerate(liste_th):
-                    # nb_threads limite le nb de threads 
-                    if i < nb_threads:
-                        try:
-                            thread = th[0]
-                            th[2] = True # status du thread :  il démarre
-                            # on supprime le premier élément et on l'ajoute à la fin
-                            # pour boucler sur toute la liste, nb_thread limitant l'itération 
-                            liste_th.append(liste_th.pop(0))
-                            thread.start()
-                        except:
-                            continue
-            time.sleep(0.5)
+            time.sleep(0.05)
+
+            for th in liste_th:
+                if threading.active_count() < nb_threads_max and th[2] == False:        
+                    th[2] = True # status du thread : il démarre                
+                    th[0].start() 
+
             if liste_th_is_done() and threading.active_count() == 2:
                 live.update(generate_table())
                 time.sleep(0.5)
                 break
-
-def test_live_table():
-    # gestion de l'affichage des table de recherche
-    with Live(generate_table()) as live:
-            while threading.active_count() > 2:
-                live.update(generate_table())        
-                for i, th in enumerate(liste_th):
-                    # nb_threads limite le nb de threads 
-                    if i < nb_threads:
-                        try:
-                            thread = th[0]
-                            th[2] = True # status du thread :  il démarre
-                            # on supprime le premier élément et on l'ajoute à la fin
-                            # pour boucler sur toute la liste, nb_thread limitant l'itération 
-                            liste_th.append(liste_th.pop(0))
-                            thread.start()
-                        except:
-                            continue
-                time.sleep(0.5)
-                if liste_th_is_done() and threading.active_count() == 2:
-                    live.update(generate_table())
-                    time.sleep(0.5)
-                    break
-
+                
 #-------------------------- Utils --------------------------#
 def run_in_thread(f):
     # thread decorator
@@ -151,30 +127,28 @@ def liste_th_is_done():
 @run_in_thread
 def search_person(pers):
     # fonction de recherche pour chaque personne
-    if isinstance(pers, str):
-        persons = ia.search_person(pers)
-        if not persons:
-            print(f'{pers} not found.')
-            sys.exit()
-        person = ia.get_person(persons[0].personID)        
-    else:
-        person = ia.get_person(pers.personID)
+    persons = ia.search_person(pers)
+    if not persons:
+        print(f'{pers} not found.')
+        sys.exit()
+    person = ia.get_person(persons[0].personID)
     lst_persons.append(person) 
 
-def search_lst_persons():
+def get_persons(name):
     # recherche de la liste de personnes via api
-    liste = lst_persons[:]
-    lst_persons.clear()
-    for p in liste:
+    genre = lambda x: [x] if isinstance(x, str) else x
+    for p in genre(name):
         search_person(p)
     live_table()
-
     # vérification de la recherche
-    [lst_persons.remove(i) for i in lst_persons if i is None]
     if isinstance(lst_persons[0], str) or isinstance(lst_persons[0], int):
         print('Nobody found.')
         typer.Exit()
+    [lst_persons.remove(i) for i in lst_persons if i is None]
 
+    if len(lst_persons) == 1:
+        return lst_persons[0]
+       
 @run_in_thread
 def search_movie(film):
     # fonction de recherche pour chaque film
@@ -183,43 +157,17 @@ def search_movie(film):
     movie = ia.get_movie(film.movieID)
     lst_movies.append(movie)
 
-def search_lst_movies(title):
+def get_movies(titles):
     # recherche de la liste de films via api
-    lst_temp = lst_movies[:]
-    lst_movies.clear()
-
-    for m in lst_temp:
-        search_movie(m)  
+    genre = lambda x: [x] if isinstance(x, str) else x
+    for m in genre(titles):
+        search_movie(m)
     live_table()   
     [lst_movies.remove(i) for i in lst_movies if i is None]
-
-#-------------------------- Link IMDB --------------------------#
-def create_link_movie(id):
-    return f'http://www.imdb.com/title/tt{id}'
-
-def create_link_person(id):
-    return f'http://www.imdb.com/name/nm{id}'
-
-#-------------------------- Utils --------------------------#
-def get_persons(name):
-    # recherche une liste de personnes
-    for p in [name]:
-        lst_persons.append(p)
-        search_lst_persons()
-    # retourne la personne si liste == 1
-    # sinon lst_person est feed dans 'search_lst_persons()'
-    if len(lst_persons) == 1:
-        name = lst_persons[0]
-        return name
-    
-def get_movies(title):
-    # même fonctionnement que la précédente
-    for m in [title]:
-        lst_movies.append(m)
-        search_lst_movies()
     if len(lst_movies) == 1:
         return lst_movies[0]
-        
+
+#-------------------------- Utils --------------------------#
 def find_shared_movies_actors():
     # on cherche les films en communs de différents acteurs
     resultats = {}
@@ -265,8 +213,7 @@ def find_shared_movies_directors(persons):
     return resultats
 
 def get_filmo(person, isdir=False, isSorted=False):
-    # renvoie la filmo grâce au genre : actor/actress
-    person = get_persons(person)  
+    # renvoie la filmo grâce au genre : actor/actress    
     if isdir and 'director' in person.get('filmography'):      
         # on retourne uniquement les films d'un réal 
         filmo = [i for i in person.get('director') if i.get('kind') == 'movie']
@@ -278,10 +225,8 @@ def get_filmo(person, isdir=False, isSorted=False):
     return filmo
      
 def get_genre_person(person):
-    # cherche si c'est un acteur et détermine le genre   
-    if 'actress' in person['filmography']:
-        return 'actress'
-    return 'actor'
+    # cherche si c'est un acteur et détermine le genre
+    return 'actress' if 'actress' in person['filmography'] else 'actor'
 
 x, y = [], []
 def onpick(event):
@@ -297,23 +242,12 @@ def onpick(event):
             continue
     plt.annotate(f'{title} ({x1}), {y1}', xy=(x1, y1), xytext=(x1, y1))
     plt.draw()
-    
-def get_mean(name, isdir=False):
-    global lst_movies
-    liste_films = []
-  
-    lst_movies = get_filmo(name, isdir)
-    search_lst_movies()
-    # tri des films sans note 
-    [liste_films.append(i.get('rating')) for i in lst_movies if i.get('rating')]
-    return statistics.mean(liste_films)
 
 #-------------------------- Typer commands --------------------------#
-def test_search_actors(name: Annotated[list[str], typer.Argument(..., help="Nom d'un acteur")]):
+def old_search_actors(name: Annotated[list[str], typer.Argument(..., help="Nom d'un acteur")]):
     """Recherche les correspondances entre plusieurs personne\n
     ex : python imdb_api.py search-actors keanu reeves laurence fishburne
     """
-    global lst_persons
     # pas de doublons avec le set
     set_noms = set()
     # permet la saisie directe des noms
@@ -323,7 +257,15 @@ def test_search_actors(name: Annotated[list[str], typer.Argument(..., help="Nom 
     [set_noms.add(f'{i[0]} {i[1]}') for i in zip_noms]
     lst_persons = list(set_noms)
     # recherches
-    search_lst_persons()
+    get_persons()
+    find_shared_movies_actors()
+
+@imdb.command()
+def collab(names: Annotated[list[str], typer.Option(..., '-n', help="Nom d'un acteur")]):
+    """Recherche les correspondances entre plusieurs personne\n
+    ex : python imdb_api.py search-actors keanu reeves laurence fishburne
+    """
+    get_persons(names)
     find_shared_movies_actors()
 
 @imdb.command()
@@ -333,7 +275,7 @@ def filmo(name: str = typer.Argument(..., help="Une seule personne à entrer"), 
     create_tree_persons(dico)
 
 @imdb.command()
-def cast(title: str = typer.Argument(..., help="Un seul titre à entrer")):
+def cast(title: str = typer.Option(..., '-t', help="Un seul titre à entrer")):
     """Retourne le casting d'un film."""
     # recherche du film   
     movie = get_movies(title)
@@ -350,12 +292,12 @@ def compare_casts(title: Annotated[list[str], typer.Option(..., '-t', help="Un t
     for x in range(2, len(lst_movies)+1):
         # combinaison et comparaison de chaque casting
         for m in itertools.combinations(lst_movies, x):
-            liste = set(m[0]['cast'])
-            titres = m[0]['title']
+            liste = set(m[0].get('cast'))
+            titres = m[0].get('title')
             for mov in m[1:]:
-                liste &= set(mov['cast'])
+                liste &= set(mov.get('cast'))
                 # on ajoute les titres combinés
-                titres += f" - {mov['title']}"
+                titres += f" - {mov.get('title')}"
             resultats[titres] = liste
 
     create_tree_cast(resultats, lambda i: '')
@@ -364,53 +306,12 @@ def compare_casts(title: Annotated[list[str], typer.Option(..., '-t', help="Un t
 def mean(name: str = typer.Option(..., '-n', help='Nom personne'), isdir: Annotated[Optional[bool], typer.Argument()] = False,
           d: Annotated[Optional[int], typer.Argument()] = None, f: Annotated[Optional[int], typer.Argument()] = None):
     """Retourne la moyenne totale de la filmo d'une personne"""
-    # faire un callback pour remplir les listes
-    print("{:.1f}".format(get_mean(name, isdir)))
-
-@imdb.command()
-def best_mean():
-    set_films = set()
-    set_actors = set()
-    lst_ratings = []
-    dico = {}
-    movies = ia.get_top250_movies()
-    
-    bar_movies = tqdm.tqdm(movies[:1], position=0)
-    for movie in bar_movies:
-        set_actors.clear()
-        bar_movies.set_description(movie.get('title'))
-        ia.update(movie)
-        bar_persons = tqdm.tqdm(movie.get('cast'), position=1, leave=False)
-        for p in bar_persons:
-            bar_persons.set_description(p.get('name'))
-            set_actors.add(p)
-    
-    bar_actors = tqdm.tqdm(set_actors, position=0, leave=True)
-    for pers in bar_actors:
-        set_films.clear()
-        bar_actors.set_description(pers.get('name'))
-        filmo = ia.get_person_filmography(pers.personID)
-        if 'actor' in filmo['data']['filmography']:
-            for m in filmo['data']['filmography']['actor']:
-                set_films.add(m)
-            dico[pers] = list(set_films)
-        else:
-            for m in filmo['data']['filmography']['actress']:
-                set_films.add(m)
-            dico[pers] = list(set_films)
-    
-    bar_pers = tqdm.tqdm(dico.keys(), position=0)
-    bar_ratings = tqdm.tqdm(dico.values(), position=1, leave=False)
-    for p in bar_pers:
-        bar_pers.set_description(p.get('name'))
-        lst_ratings.clear()
-        for movies in bar_ratings:
-            for m in movies:
-                bar_ratings.set_description(m.get('title'))
-                ia.update(m)
-                if m.get('rating'):
-                    lst_ratings.append(m.get('rating'))
-        print(p.get('name'), statistics.mean(lst_ratings))
+    filmo = []
+    person = get_persons(name)
+    get_movies(get_filmo(person, isdir))
+    # tri des films sans note 
+    [filmo.append(i.get('rating')) for i in lst_movies if i.get('rating')]    
+    print("{:.1f}".format( statistics.mean(filmo)))
 
 @imdb.command()
 def plot(name: str = typer.Option(..., '-n', help='Nom personne'), isdir: Annotated[bool, typer.Argument()] = False,
@@ -420,7 +321,7 @@ def plot(name: str = typer.Option(..., '-n', help='Nom personne'), isdir: Annota
     temp_lst = []
     # récupère les n derniers films d'une personne
     lst_movies = get_filmo(name, isdir)[:n]
-    search_lst_movies()
+    get_movies()
     # tri des films sans date ou note
     [temp_lst.append(i) for i in lst_movies if i.get('year') and i.get('rating')]
 
@@ -476,5 +377,12 @@ def proba(name: str = typer.Option(..., '-n', help='Nom personne')):
 
 if __name__ == '__main__':
     # appel de l'app avec typer
-    #filmo_actor('jake lloyd')
-    imdb()
+    #mean('jake lloyd')
+    compare_casts()
+    cast('matrix')
+    #collab(['keanu reeves', 'common'])
+    
+    
+    
+    #imdb()
+    
